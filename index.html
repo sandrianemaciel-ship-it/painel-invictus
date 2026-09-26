@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Placar Invictus</title>
+  <link rel="stylesheet" href="invictus.css">
+  <!-- Biblioteca oficial @qlik/api (empacotada localmente) -->
+  <script src="qlik-api.bundle.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="palco">
+    <canvas id="placar" width="1600" height="898"></canvas>
+  </div>
+
+  <div id="barra">
+    <span id="status">Carregando…</span>
+    <button id="btnCopiar" title="Copiar imagem para colar no WhatsApp / e-mail">Copiar imagem</button>
+    <button id="btnBaixar" title="Baixar PNG">Baixar PNG</button>
+  </div>
+
+  <script src="invictus.js"></script>
+</body>
+</html>
