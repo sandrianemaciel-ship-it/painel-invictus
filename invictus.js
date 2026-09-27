@@ -10,10 +10,11 @@
   var statusEl = document.getElementById("status");
   var params = new URLSearchParams(location.search);
 
-  /* ---------------- Geometria da arte (pixels do fundo 1600x898) ---------------- */
-  var COLS = [526, 829, 1137, 1441];          // centro: Meta, Realizado, Deveríamos, Falta
-  var COL_W = 280;                             // largura útil de cada célula
-  var ROWS = [379, 465, 548, 632, 717];        // centro vertical de cada linha
+  /* ---------------- Geometria da arte (pixels do fundo 1728x910) ---------------- */
+  var LARG = 1728, ALT = 910;
+  var COLS = [575, 900, 1228, 1549];          // centro: Meta, Realizado, Falta, Meta dia
+  var COL_W = 295;                             // largura útil de cada célula
+  var ROWS = [364, 446, 524, 603, 682];        // centro vertical de cada linha
   var CORES = { branco: "#ffffff", amarelo: "#fff21a", vermelho: "#ff2323", verde: "#35e05a" };
   var MESES = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO",
                "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
@@ -50,15 +51,16 @@
   function calendario() {
     var h = hoje(), ano = h.getFullYear(), mes = h.getMonth();
     if (CFG.mesReferencia) { var a = CFG.mesReferencia.split("-"); ano = +a[0]; mes = +a[1] - 1; }
-    var fer = feriados(ano), total = 0, decorridos = 0;
+    var fer = feriados(ano), total = 0, decorridos = 0, restantes = 0;
     var ultimo = new Date(ano, mes + 1, 0).getDate();
     for (var dia = 1; dia <= ultimo; dia++) {
       var d = new Date(ano, mes, dia), sem = d.getDay();
       if (sem === 0 || sem === 6 || fer[iso(d)]) continue;
       total++;
       if (d < h || (CFG.contarHojeComoDecorrido && d.getTime() === h.getTime())) decorridos++;
+      if (d >= h) restantes++;                 // dias úteis de hoje (inclusive) até o fim do mês
     }
-    return { ano: ano, mes: mes, total: total, decorridos: decorridos, ultimo: ultimo };
+    return { ano: ano, mes: mes, total: total, decorridos: decorridos, restantes: restantes, ultimo: ultimo };
   }
   function serialQlik(d) { // nº de dias desde 30/12/1899, como no Qlik
     return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / 864e5);
@@ -100,8 +102,8 @@
   function desenharTitulo(texto) {
     ctx.save();
     var t = 96;
-    do { ctx.font = "700 " + t + "px Oswald"; t -= 2; } while (ctx.measureText(texto).width > 1010);
-    ctx.translate(762, 120);
+    do { ctx.font = "700 " + t + "px Oswald"; t -= 2; } while (ctx.measureText(texto).width > 1040);
+    ctx.translate(815, 113);
     ctx.transform(1, 0, -0.2, 1, 0, 0);         // itálico
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
@@ -118,25 +120,29 @@
   }
 
   function desenhar(dados, cal) {
-    ctx.drawImage(fundo, 0, 0, 1600, 898);
+    ctx.drawImage(fundo, 0, 0, LARG, ALT);
     desenharTitulo("RESULTADOS PARCIAIS -- " + MESES[cal.mes]);
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     dados.forEach(function (d, i) {
       var y = ROWS[i];
-      var fator = cal.total ? cal.decorridos / cal.total : 0;
-      var ritmo = d.meta == null ? null : d.meta * fator;
-      if (ritmo != null && d.formato !== "moeda") ritmo = Math.round(ritmo);
       var falta = (d.meta == null || d.realizado == null) ? null : d.meta - d.realizado;
+      // Meta dia = o que falta ÷ dias úteis restantes (seg-sex, sem feriados, contando hoje)
+      var metaDia = null;
+      if (falta != null && falta > 0 && cal.restantes > 0) {
+        metaDia = falta / cal.restantes;
+        if (d.formato !== "moeda") metaDia = Math.ceil(metaDia);
+      }
 
-      textoAjustado(fmt(d.meta, d.formato), COLS[0], y, COL_W, 50, CORES.branco);
-      textoAjustado(fmt(d.realizado, d.formato), COLS[1], y, COL_W, 50, CORES.amarelo);
-      textoAjustado(fmt(ritmo, d.formato), COLS[2], y, COL_W, 50, CORES.branco);
+      textoAjustado(fmt(d.meta, d.formato), COLS[0], y, COL_W, 52, CORES.branco);
+      textoAjustado(fmt(d.realizado, d.formato), COLS[1], y, COL_W, 52, CORES.amarelo);
       if (falta != null && falta <= 0) {
-        textoAjustado("META BATIDA!", COLS[3], y, COL_W, 46, CORES.verde);
+        textoAjustado("META BATIDA!", COLS[2], y, COL_W, 46, CORES.verde);
+        textoAjustado("—", COLS[3], y, COL_W, 52, CORES.verde);
       } else {
-        textoAjustado(fmt(falta, d.formato), COLS[3], y, COL_W, 50, CORES.vermelho);
+        textoAjustado(fmt(falta, d.formato), COLS[2], y, COL_W, 52, CORES.vermelho);
+        textoAjustado(fmt(metaDia, d.formato), COLS[3], y, COL_W, 52, CORES.branco);
       }
     });
 
@@ -144,11 +150,11 @@
     var agora = new Date();
     var rod = "Atualizado em " + agora.toLocaleDateString("pt-BR") + " às " +
       agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) +
-      "  ·  dia útil " + cal.decorridos + " de " + cal.total;
+      "  ·  " + cal.restantes + " dias úteis restantes de " + cal.total;
     ctx.font = "600 17px Oswald";
     ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillText(rod, 19, 883);
-    ctx.fillStyle = "#d8c07a"; ctx.fillText(rod, 18, 882);
+    ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillText(rod, 19, 903);
+    ctx.fillStyle = "#d8c07a"; ctx.fillText(rod, 18, 902);
   }
 
   /* ---------------- Estado e renderização ---------------- */
