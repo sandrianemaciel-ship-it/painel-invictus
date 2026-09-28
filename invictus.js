@@ -148,8 +148,8 @@
 
     // rodapé com data de atualização
     var agora = new Date();
-    var rod = "Atualizado em " + agora.toLocaleDateString("pt-BR") + " às " +
-      agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) +
+    var rod = "Atualizado em " + (window.__atualizadoEm ||
+      (agora.toLocaleDateString("pt-BR") + " às " + agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }))) +
       "  ·  " + cal.restantes + " dias úteis restantes de " + cal.total;
     ctx.font = "600 17px Oswald";
     ctx.textAlign = "left";
@@ -263,6 +263,65 @@
     });
   }
 
+  /* ---------------- Dados publicados pelo programa (criptografados com a senha do painel) ---------------- */
+  var CHAVE_SENHA = "placarInvictusSenha";
+  var senhaAtual = null;
+  function b64(x) { return Uint8Array.from(atob(x), function (c) { return c.charCodeAt(0); }); }
+  async function decifrar(p, senha) {
+    var base = await crypto.subtle.importKey("raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveKey"]);
+    var k = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(p.salt), iterations: p.iter, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    var claro = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(p.iv) }, k, b64(p.dados));
+    return JSON.parse(new TextDecoder().decode(claro));
+  }
+  function telaSenha(erro) {
+    var d = document.getElementById("cofre");
+    if (!d) { d = document.createElement("div"); d.id = "cofre"; document.body.appendChild(d); }
+    d.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:9";
+    d.innerHTML = '<form id="fSenha" style="background:#15110a;border:1px solid #b8860b;border-radius:14px;padding:24px;width:320px;font-family:system-ui;color:#eee">' +
+      '<div style="font-size:18px;font-weight:700;color:#ffd84a;margin-bottom:6px">🔒 Placar Invictus</div>' +
+      '<div style="font-size:12px;color:#bbb;margin-bottom:14px">Digite a senha do painel.</div>' +
+      '<input id="cSenha" type="password" style="width:100%;box-sizing:border-box;padding:9px;border-radius:8px;border:1px solid #555;background:#000;color:#fff">' +
+      '<label style="display:flex;gap:6px;font-size:12px;margin:10px 0 14px"><input id="cLembrar" type="checkbox"> Lembrar neste computador</label>' +
+      '<button style="width:100%;padding:9px;border:0;border-radius:8px;background:linear-gradient(#ffe27a,#d99a00);font-weight:700">Entrar</button>' +
+      (erro ? '<div style="color:#ff6b6b;font-size:12px;margin-top:10px">' + erro + '</div>' : '') + '</form>';
+    document.getElementById("fSenha").onsubmit = function (ev) {
+      ev.preventDefault();
+      var s = document.getElementById("cSenha").value;
+      if (document.getElementById("cLembrar").checked) { try { localStorage.setItem(CHAVE_SENHA, s); } catch (e) {} }
+      abrirCofre(s);
+    };
+    setTimeout(function () { var c = document.getElementById("cSenha"); if (c) c.focus(); }, 50);
+  }
+  async function abrirCofre(senha) {
+    var pacote, dados;
+    try {
+      var r = await fetch("dados.enc.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      pacote = await r.json();
+    } catch (e) { status("Os dados ainda não foram publicados pelo programa.", true); return; }
+    try { dados = await decifrar(pacote, senha); }
+    catch (e) { try { localStorage.removeItem(CHAVE_SENHA); } catch (x) {} senhaAtual = null; telaSenha("Senha incorreta."); return; }
+    senhaAtual = senha;
+    var c = document.getElementById("cofre"); if (c) c.remove();
+    cal = calendario();
+    cal.mes = dados.mes - 1; cal.ano = dados.ano;
+    dados.indicadores.forEach(function (ind, i) {
+      if (!estado[i]) return;
+      estado[i].meta = ind.meta;
+      estado[i].partes = [ind.realizado];
+    });
+    window.__atualizadoEm = dados.atualizado;
+    status("Atualizado em " + dados.atualizado + " · a página busca a versão nova a cada 10 min");
+    render();
+  }
+  function modoCofre() {
+    var salva = null;
+    try { salva = localStorage.getItem(CHAVE_SENHA); } catch (e) {}
+    if (salva) abrirCofre(salva); else telaSenha();
+    setInterval(function () { if (senhaAtual) abrirCofre(senhaAtual); }, 10 * 60 * 1000);
+  }
+
   function modoDemo() {
     aplicarMetasFixas();
     CFG.indicadores.forEach(function (ind, i) {
@@ -305,7 +364,6 @@
 
   Promise.all([fundoPronto, fontes]).then(function () {
     render();                                   // desenha o fundo já com metas
-    var configurado = CFG.qlik && CFG.qlik.clientId && CFG.qlik.clientId.indexOf("COLE-AQUI") !== 0;
-    if (params.get("demo") === "1" || !configurado) modoDemo(); else conectarQlik();
+    if (params.get("demo") === "1") modoDemo(); else modoCofre();
   });
 })();
