@@ -299,7 +299,7 @@
       var r = await fetch("dados.enc.json?t=" + Date.now(), { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
       pacote = await r.json();
-    } catch (e) { status("Os dados ainda não foram publicados pelo programa.", true); return; }
+    } catch (e) { telaSenha("Os números ainda não foram publicados pelo programa. Tente de novo mais tarde."); return; }
     try { dados = await decifrar(pacote, senha); }
     catch (e) { try { localStorage.removeItem(CHAVE_SENHA); } catch (x) {} senhaAtual = null; telaSenha("Senha incorreta."); return; }
     senhaAtual = senha;
